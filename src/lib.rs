@@ -16,17 +16,20 @@ struct ParsedLine {
     kind: String,
     title: String,
     content: String,
+    hash:String
 }
 
 pub struct Config {
     output: String,
     source: CommitSource,
+    tag:String
 }
 
 impl Config {
     pub fn build(args: &[String]) -> Config {
         let mut output = String::from("whats_new.md");
         let mut source = CommitSource::Git;
+        let mut tag = String::from("tag");
         if args.len() >= 3 {
             source = CommitSource::File(args[1].clone());
             output = args[2].clone();
@@ -34,7 +37,7 @@ impl Config {
             output = args[1].clone();
         }
         println!("{output}");
-        Config { output, source }
+        Config { output, source,tag }
     }
 }
 
@@ -54,7 +57,8 @@ pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     // Recording them to the database 
     let pool = connect().await?;
-    record_commits(&pool,parsed_lines).await?;
+    let line_recorded = record_commits(&config.tag,&pool,parsed_lines).await?;
+    println!("{} new lines recorded",line_recorded);
     // Writing the release note
     println!("Writing the release note in '{}'", config.output);
 
@@ -74,22 +78,26 @@ fn split_one(line: &str) -> ParsedLine {
     let kind;
     let title;
     let content;
+    let hash;
     let parts: Vec<&str> = line.split(':').collect();
 
     if parts[0].contains('(') {
         let sc: Vec<&str> = parts[0].split('(').collect();
-        kind = sc[0].trim().to_string();
-        title = sc[1].replace(')', " ").trim().to_string();
+        kind = sc[0].to_lowercase().trim().to_string();
+        title = sc[1].replace(')', " ").to_lowercase().trim().to_string();
     } else {
-        kind = parts[0].to_string();
+        kind = parts[0].to_lowercase().to_string();
         title = String::from("other");
     }
     content = parts[1].trim().to_string();
+    hash = parts[2].trim().to_string();
+    // hash = String::new();
 
     ParsedLine {
         kind,
         title,
         content,
+        hash
     }
 }
 
@@ -99,7 +107,8 @@ struct Commit{
     kind:String,
     title:String,
     content:String,
-    tag:String
+    tag:String,
+    hash:String
 }
 
 pub async fn connect()->Result<SqlitePool,Box<dyn Error>>{
@@ -107,24 +116,33 @@ pub async fn connect()->Result<SqlitePool,Box<dyn Error>>{
     Ok(pool)
 }
 
-async fn add_commit(pool:&SqlitePool,parsed_line:ParsedLine)->anyhow::Result<u64>{
+async fn add_commit(tag:&str,pool:&SqlitePool,parsed_line:ParsedLine)->anyhow::Result<u64>{
     let mut conn = pool.acquire().await?;
-    let id = sqlx::query("INSERT INTO `Commit` (content,kind,title,tag)
-    VALUES($1,$2,$3,$4)")
+    let id = sqlx::query("INSERT INTO `Commit` (content,kind,title,tag,hash)
+    VALUES($1,$2,$3,$4,$5)")
     .bind(parsed_line.content)
     .bind(parsed_line.kind)
     .bind(parsed_line.title)
-    .bind("tag")
+    .bind(tag)
+    .bind(parsed_line.hash)
     .execute(&mut *conn).await?.rows_affected();
     Ok(id)
 }
 
-async fn record_commits(pool:&SqlitePool,parsed_lines:Vec<ParsedLine>)->Result<(),Box<dyn Error>>{
+async fn record_commits(tag:&str,pool:&SqlitePool,parsed_lines:Vec<ParsedLine>)->Result<i32,Box<dyn Error>>{
+   let mut line_recorded = 0;
    for line in parsed_lines{
-    let id = add_commit(pool, line).await?;
-    println!("added a commit with id {id}");
+    let id = add_commit(tag,pool, line).await;
+    match id {
+        Ok(_) => line_recorded += 1,
+        Err(error) => {
+            if !error.to_string().contains("(code: 2067) UNIQUE constraint failed"){
+                panic!("{}",error);
+            }
+        },
+    }
    }
-    Ok(())
+    Ok(line_recorded)
 }
 
 #[cfg(test)]
@@ -133,11 +151,12 @@ mod test {
 
     #[test]
     fn split_one_work() {
-        let contents = "update: Update export_game.yml";
+        let contents = "feat (Reward): Added one more reward :13883a342dfe858a234d5366a855b49ddc0c534b";
         let pars = ParsedLine {
-            kind: String::from("update"),
-            title: String::from("other"),
-            content: String::from("Update export_game.yml"),
+            kind: String::from("feat"),
+            title: String::from("reward"),
+            content: String::from("Added one more reward"),
+            hash:String::from("13883a342dfe858a234d5366a855b49ddc0c534b")
         };
         assert_eq!(pars, split_one(contents));
     }
@@ -145,36 +164,41 @@ mod test {
     #[test]
     fn split_all_work() {
         let contents = "\
-        fix:Disabled the middleware
-        update (ci):Update export_game.yml
-        update:Updated github build action
-        Fix (Opponents): blackboard for AI drops its content
-        Fix (Audio): fmod plugin not working";
+        feat (Reward): Added one more reward :13883a342dfe858a234d5366a855b49ddc0c534b
+        feat (Reward): Added two more rewards :dd187eebf6321df5b541185dd0fd110b1b384712
+        update: Added more balance to the game :9f0b66d57b97a33333681128f70396db7c2b3f53
+        feat (Tank): added one tank type :06b9582c4a3a27a27e3a90c4444d8cc40ddf17e8
+        fix (ci): fixed release notes path :478faab0a38cc5eb15b36915981ed538005dc9fb";
         let res = vec![
             ParsedLine {
+                kind: String::from("feat"),
+                title: String::from("reward"),
+                content: String::from("Added one more reward"),
+                hash:String::from("13883a342dfe858a234d5366a855b49ddc0c534b")
+            },
+            ParsedLine {
+                kind: String::from("feat"),
+                title: String::from("reward"),
+                content: String::from("Added two more rewards"),
+                hash:String::from("dd187eebf6321df5b541185dd0fd110b1b384712")
+            },
+            ParsedLine {
+                kind: String::from("update"),
+                title: String::from("other"),
+                content: String::from("Added more balance to the game"),
+                hash:String::from("9f0b66d57b97a33333681128f70396db7c2b3f53")
+            },
+            ParsedLine {
+                kind: String::from("feat"),
+                title: String::from("tank"),
+                content: String::from("added one tank type"),
+                hash:String::from("06b9582c4a3a27a27e3a90c4444d8cc40ddf17e8")
+            },
+            ParsedLine {
                 kind: String::from("fix"),
-                title: String::from("other"),
-                content: String::from("Disabled the middleware"),
-            },
-            ParsedLine {
-                kind: String::from("update"),
                 title: String::from("ci"),
-                content: String::from("Update export_game.yml"),
-            },
-            ParsedLine {
-                kind: String::from("update"),
-                title: String::from("other"),
-                content: String::from("Updated github build action"),
-            },
-            ParsedLine {
-                kind: String::from("Fix"),
-                title: String::from("Opponents"),
-                content: String::from("blackboard for AI drops its content"),
-            },
-            ParsedLine {
-                kind: String::from("Fix"),
-                title: String::from("Audio"),
-                content: String::from("fmod plugin not working"),
+                content: String::from("fixed release notes path"),
+                hash:String::from("478faab0a38cc5eb15b36915981ed538005dc9fb")
             },
         ];
 
