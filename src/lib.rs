@@ -1,9 +1,10 @@
-#[allow(unstable)]
 use git2::Repository;
 use sqlx;
+use sqlx::sqlite::SqlitePool;
 use std::env;
 use std::error::Error;
 use std::fs;
+use tokio;
 
 enum CommitSource {
     File(String),
@@ -12,7 +13,7 @@ enum CommitSource {
 
 #[derive(Debug, PartialEq)]
 struct ParsedLine {
-    typee: String,
+    kind: String,
     title: String,
     content: String,
 }
@@ -37,7 +38,7 @@ impl Config {
     }
 }
 
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let contents;
     if let CommitSource::File(file) = config.source {
         println!("Gathering commits from '{file}'");
@@ -47,10 +48,14 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         let repo = Repository::open("./")?;
         contents = String::new();
     }
-    println!("Parsing the commits");
-    let parsed_text =  split_all(&contents);
-    println!("{} commits found",parsed_text.len());
+    // Parsing the commits
+    let parsed_lines =  split_all(&contents);
+    println!("{} commits found",parsed_lines.len());
 
+    // Recording them to the database 
+    let pool = connect().await?;
+    record_commits(&pool,parsed_lines).await?;
+    // Writing the release note
     println!("Writing the release note in '{}'", config.output);
 
     Ok(())
@@ -64,54 +69,63 @@ fn split_all(contents: &str) -> Vec<ParsedLine> {
     res
 }
 
-// fun parse(contents:&[String])->
 
 fn split_one(line: &str) -> ParsedLine {
-    let typee;
+    let kind;
     let title;
     let content;
     let parts: Vec<&str> = line.split(':').collect();
 
     if parts[0].contains('(') {
         let sc: Vec<&str> = parts[0].split('(').collect();
-        typee = sc[0].trim().to_string();
+        kind = sc[0].trim().to_string();
         title = sc[1].replace(')', " ").trim().to_string();
     } else {
-        typee = parts[0].to_string();
+        kind = parts[0].to_string();
         title = String::from("other");
     }
     content = parts[1].trim().to_string();
 
     ParsedLine {
-        typee,
+        kind,
         title,
         content,
     }
 }
 
-/*
 #[derive(Debug, sqlx::FromRow)]
 struct Commit{
     id:i32,
-    content:String
+    kind:String,
+    title:String,
+    content:String,
+    tag:String
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct Type{
-    id:i32,
-    name:String
+pub async fn connect()->Result<SqlitePool,Box<dyn Error>>{
+    let pool = SqlitePool::connect("sqlite:mydb.db").await?;
+    Ok(pool)
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct Title{
-    id:i32,
-    name:String
+async fn add_commit(pool:&SqlitePool,parsed_line:ParsedLine)->anyhow::Result<u64>{
+    let mut conn = pool.acquire().await?;
+    let id = sqlx::query("INSERT INTO `Commit` (content,kind,title,tag)
+    VALUES($1,$2,$3,$4)")
+    .bind(parsed_line.content)
+    .bind(parsed_line.kind)
+    .bind(parsed_line.title)
+    .bind("tag")
+    .execute(&mut *conn).await?.rows_affected();
+    Ok(id)
 }
 
-fn connect()->Result<(),Box<dyn Error>>{
-    let pool = sqlx::sqlite::SqlitePool("sqlite:mydb.db").await?;
+async fn record_commits(pool:&SqlitePool,parsed_lines:Vec<ParsedLine>)->Result<(),Box<dyn Error>>{
+   for line in parsed_lines{
+    let id = add_commit(pool, line).await?;
+    println!("added a commit with id {id}");
+   }
     Ok(())
-}  */
+}
 
 #[cfg(test)]
 mod test {
@@ -121,7 +135,7 @@ mod test {
     fn split_one_work() {
         let contents = "update: Update export_game.yml";
         let pars = ParsedLine {
-            typee: String::from("update"),
+            kind: String::from("update"),
             title: String::from("other"),
             content: String::from("Update export_game.yml"),
         };
@@ -138,27 +152,27 @@ mod test {
         Fix (Audio): fmod plugin not working";
         let res = vec![
             ParsedLine {
-                typee: String::from("fix"),
+                kind: String::from("fix"),
                 title: String::from("other"),
                 content: String::from("Disabled the middleware"),
             },
             ParsedLine {
-                typee: String::from("update"),
+                kind: String::from("update"),
                 title: String::from("ci"),
                 content: String::from("Update export_game.yml"),
             },
             ParsedLine {
-                typee: String::from("update"),
+                kind: String::from("update"),
                 title: String::from("other"),
                 content: String::from("Updated github build action"),
             },
             ParsedLine {
-                typee: String::from("Fix"),
+                kind: String::from("Fix"),
                 title: String::from("Opponents"),
                 content: String::from("blackboard for AI drops its content"),
             },
             ParsedLine {
-                typee: String::from("Fix"),
+                kind: String::from("Fix"),
                 title: String::from("Audio"),
                 content: String::from("fmod plugin not working"),
             },
