@@ -1,0 +1,37 @@
+docs: added release notes :f0466ee736c72ba0fcfd502e8cfb88f18fc551ed
+feat (Reward): Added one more reward :13883a342dfe858a234d5366a855b49ddc0c534b
+feat (Reward): Added two more rewards :dd187eebf6321df5b541185dd0fd110b1b384712
+update: Added more balance to the game :9f0b66d57b97a33333681128f70396db7c2b3f53
+fix (ci): fixed release notes path :478faab0a38cc5eb15b36915981ed538005dc9fb
+docs:added release notes :a3904eaf3f3b12b6dff478a907fa638673fc3f54
+feat:balanced the game :44bc5d19311a2d39ee8e85e9365732a279a8e8f5
+feat (Tower): added tower unlocking condition :516c3206964ecdab11d7803b95316ff349077835
+feat (UI): added a tower selection screen :6210d5db68f0333b6ed5ffcb2d48aaf97e9a7f59
+feat (Tank): Added tower more tank types :426f3de17eb398a8fff1b47d45ccad2f4a2cf221
+feat (Tower): Added two more towers types :7e154e21d8d9b74a730654e314ddaf22ceb7d078
+feat (Tower): Added tower unlocking mechanics :cde415a21fecc848f73c68482e1ee5dd40e26e7a
+feat: added rewards logic :08b36a364183723d4bef67ef8a84c7dd0c89cb27
+fix : removed <- symbol on back button :8ebb419cd54f3f4483de38c87353a2cd9db3aba4
+feat : added some polish to the game :11cd7be2efbbfaab9070cbf52c67aa8f540ab6ff
+feat (UI): added a background image to the screens :7b67c225ef50b9754d322302de113ae360e9d001
+feat (UI): added a settings screen :37b0781c837ad2baa6490d48817bd55485b8cee8
+feat (UI): added a wave complete screen :7e51b36b10ef5e9311cba75417f375df891efbc0
+feat (UI): added a victory screen :99f9619952807e5fc5278a7f38a3585f139493d5
+feat (Tank): Added wave logic :0cf3e3186cb5eead503cab9fe3ffbd9f08ea8b21
+feat (UI): added a pause and a gameover screen :ebbc9c5cb1a4d1d129a403c7ec17fafa53ee65e3
+feat (Economy): Deploying towers cost money :97f8a528324ed558c93a7262f7e2cfc083ab70b5
+feat (Economy): Added money logic :33be28947df9133e3369f8de43dfbbf73eee29a7
+feat (Economy): Added health logic :bce052a0694f015d747f2ad18c476c2c9d30cca6
+fix: Made the projectile rotation and starting point related to tower and tank position as well as rotation :691c85f33489847d45e697f3e0a75815c5189815
+feat (Tank): Tanks move across the map :4435472632b6da81075dd88a2fc4e410dbaa514e
+feat (Tower): Towers can now be deployed :28af89a9ab14b71f6f8aaf88135e60496ccae881
+feat (Level): added the base level :d10ea3115d5f314d6b49ff94a9323e71968b0686
+feat (Tank): added one tank type :06b9582c4a3a27a27e3a90c4444d8cc40ddf17e8
+feat (Tower): added one tower type :eb816b1c22d09726a0975db7275402625e14a7cf
+ci: fix exports pressed :cda01f83fbae4fddebce13a02c0843c3fa9e9247
+ci: fix exports pressed :fa68f96d11a8345296972bf659e0199da870dd04
+docs: added a release note :bcb9388295a3e7c8a380118d390d2f1a34af83e1
+feat (ui): Added a loading screen :d6c15c86a7e154150c05fbadbb0036b8690d0b60
+feat (ui): Added a credit screen :0503d374ad361d2cd0efbaffc3c7616349c2afb4
+feat (ui): Added a home screen :ad7d45bddfb2c4d0ed94b45bb1b20da1063c86b7
+feat (ci): Added the actions to export and publish the game on itch.io :09f822757fa127515f6b2ec78a0b82f8a241eab6

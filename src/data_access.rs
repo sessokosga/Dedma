@@ -10,17 +10,17 @@ pub struct Commit {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-pub struct Kind{
-    pub kind:String
+pub struct Kind {
+    pub kind: String,
 }
 
 #[derive(Debug, sqlx::FromRow)]
-pub struct Title{
-    pub kind:String,
-    pub title:String
+pub struct Title {
+    pub kind: String,
+    pub title: String,
 }
 
-pub async fn connect() -> Result<SqlitePool, Box<dyn Error>> {
+pub async fn connect() -> anyhow::Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite:mydb.db").await?;
     Ok(pool)
 }
@@ -54,32 +54,37 @@ pub async fn get_kinds(tag: &str, pool: &SqlitePool) -> anyhow::Result<Vec<Kind>
     Ok(kinds)
 }
 
-pub async fn get_titles(tag: &str, kind:&Kind, pool: &SqlitePool) -> anyhow::Result<Vec<Title>> {
-    let titles: Vec<Title> = sqlx::query_as("SELECT DISTINCT kind, title FROM `Commit` WHERE tag = $1 AND kind = $2")
-    .bind(tag)
-    .bind(&kind.kind)
-        .fetch_all(pool)
-        .await?;
+pub async fn get_titles(tag: &str, kind: &str, pool: &SqlitePool) -> anyhow::Result<Vec<Title>> {
+    let titles: Vec<Title> =
+        sqlx::query_as("SELECT DISTINCT kind, title FROM `Commit` WHERE tag = $1 AND kind = $2")
+            .bind(tag)
+            .bind(kind)
+            .fetch_all(pool)
+            .await?;
     Ok(titles)
 }
 
-pub async fn get_commits(tag: &str, title:&Title, pool: &SqlitePool) -> anyhow::Result<Vec<Commit>> {
-    let titles: Vec<Commit> = sqlx::query_as("SELECT DISTINCT content FROM `Commit` WHERE tag = $1 AND kind = $2 AND title = $3")
+pub async fn get_commits(
+    tag: &str,
+    title: &Title,
+    pool: &SqlitePool,
+) -> anyhow::Result<Vec<Commit>> {
+    let titles: Vec<Commit> = sqlx::query_as(
+        "SELECT DISTINCT content FROM `Commit` WHERE tag = $1 AND kind = $2 AND title = $3",
+    )
     .bind(tag)
     .bind(&title.kind)
     .bind(&title.title)
-        .fetch_all(pool)
-        .await?;
+    .fetch_all(pool)
+    .await?;
     Ok(titles)
 }
-
-
 
 pub async fn record_commits(
     tag: &str,
     pool: &SqlitePool,
     parsed_lines: Vec<ParsedLine>,
-) -> Result<i32, Box<dyn Error>> {
+) -> anyhow::Result<i32> {
     let mut line_recorded = 0;
     for line in parsed_lines {
         let id = add_commit(tag, pool, line).await;

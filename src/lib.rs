@@ -1,9 +1,15 @@
 mod data_access;
 
-use git2::Repository;
+use anyhow::Ok;
+use git2::{Commit,ObjectType,Repository};
 use sqlx::{self, Result};
+use std::collections::HashMap;
 use std::error::Error;
-use std::fs;
+use std::fs::File;
+use std::hash::Hash;
+use std::io::Write;
+use std::process;
+use std::{any, fs};
 
 enum CommitSource {
     File(String),
@@ -35,7 +41,7 @@ impl Config {
         } else if args.len() >= 2 {
             output = args[1].clone();
         }
-        println!("{output}");
+        // println!("{output}");
         Config {
             output,
             source,
@@ -44,15 +50,33 @@ impl Config {
     }
 }
 
-pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
+pub async fn run(config: Config) -> anyhow::Result<()> {
     let contents;
     if let CommitSource::File(file) = config.source {
-        println!("Gathering commits from '{file}'");
+        // println!("Gathering commits from '{file}'");
         contents = fs::read_to_string(file)?;
     } else {
-        println!("Gathering commits from Git");
+        // println!("Gathering commits from Git");
         let repo = Repository::open("./")?;
         contents = String::new();
+
+        // let obj = repo.head()?.resolve()?.peel_to_blob()?;
+        // println!("{}",obj.message().expect("msg"));
+        
+
+        // let res = repo .tag_names(None)?;
+        // println!("number of tags : {}",res.len());
+        // for t in res.iter(){
+        //     if let Some(er) = t{
+        //         println!("{} ",er)
+        //     }
+        // }
+
+
+
+        // process::exit(1);
+
+
     }
     // Parsing the commits
     let parsed_lines = split_all(&contents);
@@ -64,17 +88,12 @@ pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
     println!("{} new lines recorded", line_recorded);
     // Writing the release note
     println!("Writing the release note in '{}'", config.output);
-    let kinds = data_access::get_kinds(&config.tag, &pool).await?;
-    let titles = data_access::get_titles(&config.tag, &kinds[1], &pool).await?;
-    let commits = data_access::get_commits(&config.tag, &titles[0], &pool).await?;
-    println!("Got {} commits from  title {} of kind {}",commits.len(),titles[0].title,kinds[1].kind);
-    
-    for kin in commits{
-        println!("{}",kin.content);
-    }
+    let notes = generate_release_notes(&config.tag, &pool).await?;
+    let _ = write_release_note(&config.output, notes)?;
 
     Ok(())
 }
+
 
 fn split_all(contents: &str) -> Vec<ParsedLine> {
     let mut res: Vec<ParsedLine> = Vec::new();
@@ -111,9 +130,98 @@ fn split_one(line: &str) -> ParsedLine {
     }
 }
 
+fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
+    let result;
+    let kinds: HashMap<&str, &str> = HashMap::from([
+        ("feat", "New features"),
+        ("fix", "Bug fix"),
+        ("chore", "Chore"),
+        ("refactor", "Refactoring"),
+        ("docs", "Documentation"),
+        ("style", "Code Style"),
+        ("test", "Test"),
+        ("perf", "Performances"),
+        ("ci", "Continuous Integration (CI)"),
+        ("build", "Build System"),
+        ("revert", "Reverts"),
+        ("update", "Updates"),
+    ]);
+    if kinds.contains_key(kind) {
+        result = kinds[kind];
+    } else {
+        panic!("kind {kind} not found");
+    }
+    Ok(result)
+}
+
+fn beautify_title(title: &str) -> String {
+    let result;
+    if title.len() <= 3 {
+        result = title.to_uppercase();
+    } else {
+        let cap = title.to_uppercase();
+        let mut res = String::from(&cap[0..1].to_string());
+        res.push_str(&title[1..]);
+        result = res;
+    }
+    result
+}
+
+async fn generate_release_notes(tag: &str, pool: &sqlx::SqlitePool) -> anyhow::Result<String> {
+    let order = vec![
+        "feat".to_string(),
+        "fix".to_string(),
+        "update".to_string(),
+        "chore".to_string(),
+        "refactor".to_string(),
+        "docs".to_string(),
+        "style".to_string(),
+        "test".to_string(),
+        "perf".to_string(),
+        "ci".to_string(),
+        "build".to_string(),
+        "revert".to_string(),
+    ];
+    let mut notes = String::new();
+    let ki = data_access::get_kinds(tag, &pool).await?;
+    let mut kinds: Vec<String> = vec![];
+    for k in ki {
+        kinds.push(k.kind);
+    }
+
+    for kind in order {
+        if !kinds.contains(&kind) {
+            continue;
+        }
+        notes.push_str(&format!("# {}\n", beautify_kind(&kind)?));
+
+        let titles = data_access::get_titles(tag, &kind, &pool).await?;
+        for title in &titles {
+            if title.title != String::from("other") {
+                notes.push_str(&format!("## {}\n", beautify_title(&title.title)));
+            }
+
+            let commits = data_access::get_commits(tag, title, &pool).await?;
+            for commit in &commits {
+                notes.push_str(&format!("- {}\n", commit.content));
+            }
+        }
+    }
+
+    Ok(notes)
+}
+
+fn write_release_note(file_path: &str, notes: String) -> anyhow::Result<()> {
+    let mut file = File::create(file_path)?;
+    file.write_fmt(format_args!("{}", notes))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::result::Result::Ok;
+    use tokio;
 
     #[test]
     fn split_one_work() {
@@ -170,5 +278,35 @@ mod test {
         ];
 
         assert_eq!(res, split_all(contents))
+    }
+
+    async fn run_test(contents:&str)->anyhow::Result<String>{
+        let tag = "tag";
+        let result ;
+        let parsed_lines = split_all(&contents);
+        let pool = data_access::connect().await?;
+        let _ = data_access::record_commits(tag, &pool, parsed_lines).await?;
+        result = generate_release_notes(tag, &pool).await?;
+        Ok(result)
+    }
+
+    #[tokio::test]
+    // #[ignore = "need to find a way to run async tests"]
+    async fn release_notes() {
+        let contents = fs::read_to_string("./tests/logs.txt").expect("check input file");
+
+        let notes = fs::read_to_string("./tests/parsed.md").expect("check output file");
+
+        let res = run_test(&contents).await;
+        let result ;
+        match res {
+            Ok(res) => {result = res},
+            Err(error) => {
+                println!("error while testing {error}");
+                result=String::new()
+            },
+        }
+        
+        assert_eq!(result,notes)
     }
 }
