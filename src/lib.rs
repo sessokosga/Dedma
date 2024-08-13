@@ -1,15 +1,14 @@
 mod data_access;
 
 use anyhow::Ok;
-use git2::{Commit,ObjectType,Repository};
-use sqlx::{self, Result};
+use git2::{Repository};
+use sqlx::{self};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::hash::Hash;
 use std::io::Write;
-use std::process;
-use std::{any, fs};
+use std::{fs};
 
 enum CommitSource {
     File(String),
@@ -62,7 +61,6 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 
         // let obj = repo.head()?.resolve()?.peel_to_blob()?;
         // println!("{}",obj.message().expect("msg"));
-        
 
         // let res = repo .tag_names(None)?;
         // println!("number of tags : {}",res.len());
@@ -72,11 +70,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         //     }
         // }
 
-
-
         // process::exit(1);
-
-
     }
     // Parsing the commits
     let parsed_lines = split_all(&contents);
@@ -93,7 +87,6 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 
     Ok(())
 }
-
 
 fn split_all(contents: &str) -> Vec<ParsedLine> {
     let mut res: Vec<ParsedLine> = Vec::new();
@@ -280,11 +273,11 @@ mod test {
         assert_eq!(res, split_all(contents))
     }
 
-    async fn run_test(contents:&str)->anyhow::Result<String>{
+    async fn run_test(contents: &str) -> anyhow::Result<String> {
         let tag = "tag";
-        let result ;
+        let result;
         let parsed_lines = split_all(&contents);
-        let pool = data_access::connect().await?;
+        let pool = data_access::connect_test().await?;
         let _ = data_access::record_commits(tag, &pool, parsed_lines).await?;
         result = generate_release_notes(tag, &pool).await?;
         Ok(result)
@@ -298,15 +291,15 @@ mod test {
         let notes = fs::read_to_string("./tests/parsed.md").expect("check output file");
 
         let res = run_test(&contents).await;
-        let result ;
+        let result;
         match res {
-            Ok(res) => {result = res},
+            Ok(res) => result = res,
             Err(error) => {
                 println!("error while testing {error}");
-                result=String::new()
-            },
+                result = String::new()
+            }
         }
-        
-        assert_eq!(result,notes)
+
+        assert_eq!(result, notes)
     }
 }

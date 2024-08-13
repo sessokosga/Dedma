@@ -1,6 +1,6 @@
 use sqlx::sqlite::SqlitePool;
-use sqlx::{self, Result, Row};
-use std::error::Error;
+use sqlx::{self, Row};
+use std::fs::{DirBuilder, File};
 
 use crate::ParsedLine;
 
@@ -20,9 +20,62 @@ pub struct Title {
     pub title: String,
 }
 
+async fn create_database(pool:&SqlitePool)->anyhow::Result<()> {
+    sqlx::query("\
+        BEGIN TRANSACTION;
+        CREATE TABLE IF NOT EXISTS \"Commit\" (
+            \"id\"	INTEGER,
+            \"content\"	TEXT NOT NULL,
+            \"kind\"	TEXT NOT NULL,
+            \"title\"	TEXT NOT NULL,
+            \"tag\"	TEXT NOT NULL,
+            \"hash\"	INTEGER NOT NULL UNIQUE,
+            PRIMARY KEY(\"id\" AUTOINCREMENT)
+        );
+        COMMIT;").execute(pool).await?;
+    Ok(())
+}
+
 pub async fn connect() -> anyhow::Result<SqlitePool> {
-    let pool = SqlitePool::connect("sqlite:mydb.db").await?;
-    Ok(pool)
+    let pool = SqlitePool::connect("sqlite:./.dedma/dedma_db.db").await;
+    match pool {
+        Ok(pool) => {return  Ok(pool);}
+        Err(err) => {
+            DirBuilder::new().create("./.dedma");
+            File::create("./.dedma/dedma_db.db");
+            let pool = SqlitePool::connect("sqlite:./.dedma/dedma_db.db").await;
+            match pool {
+                Ok(pool) =>{
+                    create_database(&pool).await;
+                    return Ok(pool);
+                } 
+                Err(error) => {
+                    panic!("Error creating database: {error}")
+                },
+            }
+        }
+    }
+}
+
+pub async fn connect_test()-> anyhow::Result<SqlitePool> {
+    let pool = SqlitePool::connect("sqlite:./tests/test_db.db").await;
+    match pool {
+        Ok(pool) => {return  Ok(pool);}
+        Err(err) => {
+            let _ = DirBuilder::new().create("./tests");
+            let _ = File::create("./tests/test_db.db");
+            let pool = SqlitePool::connect("sqlite:./tests/test_db.db").await;
+            match pool {
+                Ok(pool) =>{
+                    create_database(&pool).await;
+                    return Ok(pool);
+                } 
+                Err(error) => {
+                    panic!("Error creating database: {error}")
+                },
+            }
+        }
+    }
 }
 
 pub async fn add_commit(
