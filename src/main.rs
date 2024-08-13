@@ -7,9 +7,8 @@ async fn main() {
     let args: Vec<String> = env::args().collect();
     let config = Config::build(&args);
 
-    let _ = dedma::run(config).await
-        .unwrap_or_else(|error| {
-            println!("Application error : {error}");
-            process::exit(1)
-        });
+    let _ = dedma::run(config).await.unwrap_or_else(|error| {
+        println!("Application error : {error}");
+        process::exit(1)
+    });
 }
