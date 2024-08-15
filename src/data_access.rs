@@ -1,7 +1,6 @@
-use sqlx::sqlite::SqlitePool;
-use sqlx;
+use indicatif::ProgressBar;
+use sqlx::{self,sqlite::SqlitePool};
 use std::fs::{DirBuilder, File};
-
 use crate::ParsedLine;
 
 #[derive(Debug, sqlx::FromRow)]
@@ -136,12 +135,18 @@ pub async fn record_commits(
     tag: &str,
     pool: &SqlitePool,
     parsed_lines: Vec<ParsedLine>,
+    progress:Option<&ProgressBar>
 ) -> anyhow::Result<i32> {
     let mut line_recorded = 0;
     for line in parsed_lines {
         let id = add_commit(tag, pool, line).await;
         match id {
-            Ok(_) => line_recorded += 1,
+            Ok(_) => {
+                line_recorded += 1;
+                if let Some(p) = progress{
+                    p.inc(1);
+                }
+            }
             Err(error) => {
                 if !error
                     .to_string()
@@ -152,5 +157,6 @@ pub async fn record_commits(
             }
         }
     }
+
     Ok(line_recorded)
 }

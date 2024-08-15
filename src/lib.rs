@@ -1,12 +1,9 @@
 mod data_access;
 
 use anyhow::Ok;
+use indicatif::{ProgressBar,ProgressState,ProgressStyle};
 use sqlx::SqlitePool;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
-use std::vec;
-use std::{fs,process::Command};
+use std::{fs::{self, File},process::Command,fmt, vec, io::Write, collections::HashMap};
 
 enum CommitSource {
     File(String),
@@ -108,37 +105,45 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     let contents;
     let tag;
     if let CommitSource::File(file) = config.source {
-        println!("Gathering commits from '{file}...'");
+        // println!("Gathering commits from '{file}...'");
         contents = fs::read_to_string(file)?;
         tag = config.tag;
     } else {
-        println!("Gathering commits from Git repository...");
+        // println!("Gathering commits from Git repository...");
         contents = read_from_git()?;
         let tagi = get_tag()?;
         tag = tagi.1;
     }
+    println!("Generatinge release notes in '{}'", config.output);
+    let size:u64 = contents.lines().count().try_into().unwrap();
+    let size = size *3;
+    let progress = get_progress_bar(size);
 
     // Parsing the commits
-    let parsed_lines = split_all(&contents);
-    println!("{} commits found", parsed_lines.len());
+    let parsed_lines = split_all(&contents,Some(&progress));
+    // println!("{} commits found", parsed_lines.len());
 
     // Recording them to the database
     let pool = data_access::connect().await?;
-    let _ = data_access::record_commits(&tag, &pool, parsed_lines).await?;
+    let _ = data_access::record_commits(&tag, &pool, parsed_lines,Some(&progress)).await?;
     // println!("{} new lines recorded", line_recorded);
     // Writing the release note
-    println!("Writing the release note in '{}'...", config.output);
-    let notes = generate_release_notes(&tag, &pool).await?;
+    // println!("Writing the release note in '{}'...", config.output);
+    let notes = generate_release_notes(&tag, &pool,Some(&progress)).await?;
     // println!("{}",notes);
     let _ = write_release_note(&config.output, notes)?;
+    progress.finish_with_message("Done");
 
     Ok(())
 }
 
-fn split_all(contents: &str) -> Vec<ParsedLine> {
+fn split_all(contents: &str, progress:Option<&ProgressBar>) -> Vec<ParsedLine> {
     let mut res: Vec<ParsedLine> = Vec::new();
     for line in contents.lines() {
-        res.push(split_one(line.trim()))
+        res.push(split_one(line.trim()));
+        if let Some(p) = progress{
+            p.inc(1);
+        }
     }
     res
 }
@@ -168,6 +173,16 @@ fn split_one(line: &str) -> ParsedLine {
         content,
         hash,
     }
+}
+
+fn get_progress_bar(size:u64)->ProgressBar{
+    let pb = ProgressBar::new(size);
+    pb.set_style(ProgressStyle::with_template(
+        "{spinner:.green} [{elapsed_precise}] [{bar:60.cyan/blue}] {pos}/{len}"
+    ).unwrap()
+    .with_key("eta",|state: &ProgressState, w: &mut dyn fmt::Write| write!(w,"{:.1}s", state.eta().as_secs_f64()).unwrap())
+    .progress_chars("#>-"));
+    pb
 }
 
 fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
@@ -207,7 +222,7 @@ fn beautify_title(title: &str) -> String {
     result
 }
 
-async fn generate_release_notes(tag: &str, pool: &SqlitePool) -> anyhow::Result<String> {
+async fn generate_release_notes(tag: &str, pool: &SqlitePool, progress:Option<&ProgressBar>) -> anyhow::Result<String> {
     let order = vec![
         "feat".to_string(),
         "fix".to_string(),
@@ -244,6 +259,9 @@ async fn generate_release_notes(tag: &str, pool: &SqlitePool) -> anyhow::Result<
             let commits = data_access::get_commits(tag, title, &pool).await?;
             for commit in &commits {
                 notes.push_str(&format!("- {}\n", commit.content));
+                if let Some(p) = progress{
+                    p.inc(1);
+                }
             }
         }
     }
@@ -317,16 +335,16 @@ mod test {
             },
         ];
 
-        assert_eq!(res, split_all(contents))
+        assert_eq!(res, split_all(contents,None))
     }
 
     async fn run_test(contents: &str) -> anyhow::Result<String> {
         let tag = "tag";
         let result;
-        let parsed_lines = split_all(&contents);
+        let parsed_lines = split_all(&contents,None);
         let pool = data_access::connect_test().await?;
-        let _ = data_access::record_commits(tag, &pool, parsed_lines).await?;
-        result = generate_release_notes(tag, &pool).await?;
+        let _ = data_access::record_commits(tag, &pool, parsed_lines,None).await?;
+        result = generate_release_notes(tag, &pool,None).await?;
         Ok(result)
     }
 
