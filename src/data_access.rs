@@ -1,5 +1,5 @@
 use sqlx::sqlite::SqlitePool;
-use sqlx::{self, Row};
+use sqlx;
 use std::fs::{DirBuilder, File};
 
 use crate::ParsedLine;
@@ -31,7 +31,6 @@ async fn create_database(pool:&SqlitePool)->anyhow::Result<()> {
             \"tag\"	TEXT NOT NULL,
             \"hash\"	INTEGER NOT NULL UNIQUE,
             PRIMARY KEY(\"id\" AUTOINCREMENT)
-        );
         COMMIT;").execute(pool).await?;
     Ok(())
 }
@@ -40,13 +39,13 @@ pub async fn connect() -> anyhow::Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite:./.dedma/dedma_db.db").await;
     match pool {
         Ok(pool) => {return  Ok(pool);}
-        Err(err) => {
-            DirBuilder::new().create("./.dedma");
-            File::create("./.dedma/dedma_db.db");
+        Err(_) => {
+            DirBuilder::new().create("./.dedma")?;
+            File::create("./.dedma/dedma_db.db")?;
             let pool = SqlitePool::connect("sqlite:./.dedma/dedma_db.db").await;
             match pool {
                 Ok(pool) =>{
-                    create_database(&pool).await;
+                    create_database(&pool).await?;
                     return Ok(pool);
                 } 
                 Err(error) => {
@@ -61,13 +60,13 @@ pub async fn connect_test()-> anyhow::Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite:./tests/test_db.db").await;
     match pool {
         Ok(pool) => {return  Ok(pool);}
-        Err(err) => {
+        Err(_) => {
             let _ = DirBuilder::new().create("./tests");
             let _ = File::create("./tests/test_db.db");
             let pool = SqlitePool::connect("sqlite:./tests/test_db.db").await;
             match pool {
                 Ok(pool) =>{
-                    create_database(&pool).await;
+                    create_database(&pool).await?;
                     return Ok(pool);
                 } 
                 Err(error) => {

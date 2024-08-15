@@ -1,14 +1,12 @@
 mod data_access;
 
 use anyhow::Ok;
-use git2::{Repository};
-use sqlx::{self};
+use sqlx::SqlitePool;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs::File;
-use std::hash::Hash;
 use std::io::Write;
-use std::{fs};
+use std::vec;
+use std::{fs,process::Command};
 
 enum CommitSource {
     File(String),
@@ -49,40 +47,89 @@ impl Config {
     }
 }
 
+fn get_tag()->anyhow::Result<(String,String)>{
+    let tags = Command::new("git")
+        .arg("tag")
+        .arg("--sort=-v:refname")
+        .output()?;
+    
+    let tags = String::from_utf8_lossy(&tags.stdout);
+    if tags.len()<=0{
+      return Ok(("no_tag".to_string(),"no_tag".to_string()))
+    }
+
+    let mut vers: Vec<String> = vec![];
+
+    let max = if tags.len() >= 2 { 2 } else { 1 };
+
+    for tag in tags.lines() {
+        if vers.len() >= max {
+            break;
+        } else {
+            vers.push(tag.to_string());
+        }
+    }
+    if max == 2{
+        Ok((vers[1].clone(),vers[0].clone()))
+    }else{
+        Ok((vers[0].clone(),vers[0].clone()))
+    }
+}
+
+fn read_from_git()->anyhow::Result<String>{
+    let tags = get_tag()?;
+
+    let commits;
+    // print!("git log ");
+    if tags.0 != tags.1 {
+        let args = format!("{}..{}",tags.0,tags.1);
+        commits = Command::new("git")
+        .arg("log")
+        .arg(&args)
+        .arg("--format=%s :%H")
+        .output()?;
+        
+        // print!("{} ",&args);
+
+     
+} else {
+        commits = Command::new("git")
+        .arg("log")
+        .arg("--format=%s :%H")
+        .output()?;
+    }
+    // println!("--format=\"%s :%H\"");
+
+    Ok(String::from_utf8_lossy(&commits.stdout).to_string())
+
+}
+
 pub async fn run(config: Config) -> anyhow::Result<()> {
     let contents;
+    let tag;
     if let CommitSource::File(file) = config.source {
-        // println!("Gathering commits from '{file}'");
+        println!("Gathering commits from '{file}...'");
         contents = fs::read_to_string(file)?;
+        tag = config.tag;
     } else {
-        // println!("Gathering commits from Git");
-        let repo = Repository::open("./")?;
-        contents = String::new();
-
-        // let obj = repo.head()?.resolve()?.peel_to_blob()?;
-        // println!("{}",obj.message().expect("msg"));
-
-        // let res = repo .tag_names(None)?;
-        // println!("number of tags : {}",res.len());
-        // for t in res.iter(){
-        //     if let Some(er) = t{
-        //         println!("{} ",er)
-        //     }
-        // }
-
-        // process::exit(1);
+        println!("Gathering commits from Git repository...");
+        contents = read_from_git()?;
+        let tagi = get_tag()?;
+        tag = tagi.1;
     }
+
     // Parsing the commits
     let parsed_lines = split_all(&contents);
     println!("{} commits found", parsed_lines.len());
 
     // Recording them to the database
     let pool = data_access::connect().await?;
-    let line_recorded = data_access::record_commits(&config.tag, &pool, parsed_lines).await?;
-    println!("{} new lines recorded", line_recorded);
+    let _ = data_access::record_commits(&tag, &pool, parsed_lines).await?;
+    // println!("{} new lines recorded", line_recorded);
     // Writing the release note
-    println!("Writing the release note in '{}'", config.output);
-    let notes = generate_release_notes(&config.tag, &pool).await?;
+    println!("Writing the release note in '{}'...", config.output);
+    let notes = generate_release_notes(&tag, &pool).await?;
+    // println!("{}",notes);
     let _ = write_release_note(&config.output, notes)?;
 
     Ok(())
@@ -160,7 +207,7 @@ fn beautify_title(title: &str) -> String {
     result
 }
 
-async fn generate_release_notes(tag: &str, pool: &sqlx::SqlitePool) -> anyhow::Result<String> {
+async fn generate_release_notes(tag: &str, pool: &SqlitePool) -> anyhow::Result<String> {
     let order = vec![
         "feat".to_string(),
         "fix".to_string(),
