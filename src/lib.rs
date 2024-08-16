@@ -24,6 +24,9 @@ pub struct Config {
     tag: String,
 }
 
+
+
+
 impl Config {
     pub fn build(args: &[String]) -> Config {
         let mut output = String::from("whats_new.md");
@@ -114,10 +117,9 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         let tagi = get_tag()?;
         tag = tagi.1;
     }
-    println!("Generatinge release notes in '{}'", config.output);
     let size:u64 = contents.lines().count().try_into().unwrap();
-    let size = size *3;
-    let progress = get_progress_bar(size);
+    println!("Generatinge {size} release notes in '{}'", config.output);
+    let progress = get_progress_bar(size*3);
 
     // Parsing the commits
     let parsed_lines = split_all(&contents,Some(&progress));
@@ -178,7 +180,8 @@ fn split_one(line: &str) -> ParsedLine {
 fn get_progress_bar(size:u64)->ProgressBar{
     let pb = ProgressBar::new(size);
     pb.set_style(ProgressStyle::with_template(
-        "{spinner:.green} [{elapsed_precise}] [{bar:60.cyan/blue}] {pos}/{len}"
+        "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}]"
+        // "{spinner:.green} [{elapsed_precise}] [{bar:60.cyan/blue}] {pos}/{len}"
     ).unwrap()
     .with_key("eta",|state: &ProgressState, w: &mut dyn fmt::Write| write!(w,"{:.1}s", state.eta().as_secs_f64()).unwrap())
     .progress_chars("#>-"));
