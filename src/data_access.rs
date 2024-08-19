@@ -21,16 +21,15 @@ pub struct Title {
 
 async fn create_database(pool:&SqlitePool)->anyhow::Result<()> {
     sqlx::query("\
-        BEGIN TRANSACTION;
-        CREATE TABLE IF NOT EXISTS \"Commit\" (
-            \"id\"	INTEGER,
-            \"content\"	TEXT NOT NULL,
-            \"kind\"	TEXT NOT NULL,
-            \"title\"	TEXT NOT NULL,
-            \"tag\"	TEXT NOT NULL,
-            \"hash\"	INTEGER NOT NULL UNIQUE,
-            PRIMARY KEY(\"id\" AUTOINCREMENT)
-        COMMIT;").execute(pool).await?;
+        CREATE TABLE IF NOT EXISTS `Commit` (
+            id	INTEGER,
+            content	TEXT NOT NULL,
+            kind	TEXT NOT NULL,
+            title	TEXT NOT NULL,
+            tag	TEXT NOT NULL,
+            hash	INTEGER NOT NULL UNIQUE,
+            PRIMARY KEY(id AUTOINCREMENT)
+        )").execute(pool).await?;
     Ok(())
 }
 
