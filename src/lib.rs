@@ -1,9 +1,16 @@
 mod data_access;
 
 use anyhow::Ok;
-use indicatif::{ProgressBar,ProgressState,ProgressStyle};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use sqlx::SqlitePool;
-use std::{fs::{self, File},process::Command,fmt, vec, io::Write, collections::HashMap};
+use std::{
+    collections::HashMap,
+    fmt,
+    fs::{self, File},
+    io::Write,
+    process::Command,
+    vec,
+};
 
 enum CommitSource {
     File(String),
@@ -23,9 +30,6 @@ pub struct Config {
     source: CommitSource,
     tag: String,
 }
-
-
-
 
 impl Config {
     pub fn build(args: &[String]) -> Config {
@@ -47,20 +51,22 @@ impl Config {
     }
 }
 
-fn get_tag()->anyhow::Result<(String,String)>{
+fn get_tag() -> anyhow::Result<(String, String)> {
     let tags = Command::new("git")
         .arg("tag")
         .arg("--sort=-v:refname")
         .output()?;
-    
-    let tags = String::from_utf8_lossy(&tags.stdout);
-    if tags.len()<=0{
-      return Ok(("no_tag".to_string(),"no_tag".to_string()))
+
+    let tags = String::from_utf8_lossy(&tags.stdout).trim().to_string();
+    if tags.len() <= 0 {
+        return Ok(("no_tag".to_string(), "no_tag".to_string()));
     }
 
     let mut vers: Vec<String> = vec![];
 
-    let max = if tags.len() >= 2 { 2 } else { 1 };
+    let max = if tags.lines().count() >= 2 { 2 } else { 1 };
+
+    
 
     for tag in tags.lines() {
         if vers.len() >= max {
@@ -69,39 +75,37 @@ fn get_tag()->anyhow::Result<(String,String)>{
             vers.push(tag.to_string());
         }
     }
-    if max == 2{
-        Ok((vers[1].clone(),vers[0].clone()))
-    }else{
-        Ok((vers[0].clone(),vers[0].clone()))
+    dbg!(tags);
+    if max == 2 {
+        Ok((vers[1].clone(), vers[0].clone()))
+    } else {
+        Ok((vers[0].clone(), vers[0].clone()))
     }
 }
 
-fn read_from_git()->anyhow::Result<String>{
+fn read_from_git() -> anyhow::Result<String> {
     let tags = get_tag()?;
 
     let commits;
     // print!("git log ");
     if tags.0 != tags.1 {
-        let args = format!("{}..{}",tags.0,tags.1);
+        let args = format!("{}..{}", tags.0, tags.1);
         commits = Command::new("git")
-        .arg("log")
-        .arg(&args)
-        .arg("--format=%s :%H")
-        .output()?;
-        
-        // print!("{} ",&args);
+            .arg("log")
+            .arg(&args)
+            .arg("--format=%s :%H")
+            .output()?;
 
-     
-} else {
+        // print!("{} ",&args);
+    } else {
         commits = Command::new("git")
-        .arg("log")
-        .arg("--format=%s :%H")
-        .output()?;
+            .arg("log")
+            .arg("--format=%s :%H")
+            .output()?;
     }
     // println!("--format=\"%s :%H\"");
 
     Ok(String::from_utf8_lossy(&commits.stdout).to_string())
-
 }
 
 pub async fn run(config: Config) -> anyhow::Result<()> {
@@ -117,21 +121,21 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         let tagi = get_tag()?;
         tag = tagi.1;
     }
-    let size:u64 = contents.lines().count().try_into().unwrap();
+    let size: u64 = contents.lines().count().try_into().unwrap();
     println!("Generatinge {size} release notes in '{}'", config.output);
-    let progress = get_progress_bar(size*3);
+    let progress = get_progress_bar(size * 3);
 
     // Parsing the commits
-    let parsed_lines = split_all(&contents,Some(&progress));
+    let parsed_lines = split_all(&contents, Some(&progress));
     // println!("{} commits found", parsed_lines.len());
 
     // Recording them to the database
     let pool = data_access::connect().await?;
-    let _ = data_access::record_commits(&tag, &pool, parsed_lines,Some(&progress)).await?;
+    let _ = data_access::record_commits(&tag, &pool, parsed_lines, Some(&progress)).await?;
     // println!("{} new lines recorded", line_recorded);
     // Writing the release note
     // println!("Writing the release note in '{}'...", config.output);
-    let notes = generate_release_notes(&tag, &pool,Some(&progress)).await?;
+    let notes = generate_release_notes(&tag, &pool, Some(&progress)).await?;
     // println!("{}",notes);
     let _ = write_release_note(&config.output, notes)?;
     progress.finish_with_message("Done");
@@ -139,11 +143,11 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn split_all(contents: &str, progress:Option<&ProgressBar>) -> Vec<ParsedLine> {
+fn split_all(contents: &str, progress: Option<&ProgressBar>) -> Vec<ParsedLine> {
     let mut res: Vec<ParsedLine> = Vec::new();
     for line in contents.lines() {
         res.push(split_one(line.trim()));
-        if let Some(p) = progress{
+        if let Some(p) = progress {
             p.inc(1);
         }
     }
@@ -151,23 +155,26 @@ fn split_all(contents: &str, progress:Option<&ProgressBar>) -> Vec<ParsedLine> {
 }
 
 fn split_one(line: &str) -> ParsedLine {
-    let kind;
-    let title;
+    let mut kind =String::from("other");
+    let mut title=String::from("other");
     let content;
     let hash;
     let parts: Vec<&str> = line.split(':').collect();
-
+    
+    if parts.len() >= 3 {
     if parts[0].contains('(') {
         let sc: Vec<&str> = parts[0].split('(').collect();
         kind = sc[0].to_lowercase().trim().to_string();
         title = sc[1].replace(')', " ").trim().to_lowercase().to_string();
     } else {
         kind = parts[0].trim().to_lowercase().to_string();
-        title = String::from("other");
     }
-    content = parts[1].trim().to_string();
-    hash = parts[2].trim().to_string();
-    // hash = String::new();
+        content = parts[1].trim().to_string();
+        hash = parts[2].trim().to_string();
+    } else {
+        content = parts[0].trim().to_string();
+        hash = parts[1].trim().to_string();
+    }
 
     ParsedLine {
         kind,
@@ -177,14 +184,18 @@ fn split_one(line: &str) -> ParsedLine {
     }
 }
 
-fn get_progress_bar(size:u64)->ProgressBar{
+fn get_progress_bar(size: u64) -> ProgressBar {
     let pb = ProgressBar::new(size);
-    pb.set_style(ProgressStyle::with_template(
-        "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}]"
-        // "{spinner:.green} [{elapsed_precise}] [{bar:60.cyan/blue}] {pos}/{len}"
-    ).unwrap()
-    .with_key("eta",|state: &ProgressState, w: &mut dyn fmt::Write| write!(w,"{:.1}s", state.eta().as_secs_f64()).unwrap())
-    .progress_chars("#>-"));
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}]", // "{spinner:.green} [{elapsed_precise}] [{bar:60.cyan/blue}] {pos}/{len}"
+        )
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn fmt::Write| {
+            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
+        })
+        .progress_chars("#>-"),
+    );
     pb
 }
 
@@ -203,6 +214,7 @@ fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
         ("build", "Build System"),
         ("revert", "Reverts"),
         ("update", "Updates"),
+        ("other", ""),
     ]);
     if kinds.contains_key(kind) {
         result = kinds[kind];
@@ -225,8 +237,13 @@ fn beautify_title(title: &str) -> String {
     result
 }
 
-async fn generate_release_notes(tag: &str, pool: &SqlitePool, progress:Option<&ProgressBar>) -> anyhow::Result<String> {
+async fn generate_release_notes(
+    tag: &str,
+    pool: &SqlitePool,
+    progress: Option<&ProgressBar>,
+) -> anyhow::Result<String> {
     let order = vec![
+        "other".to_string(),
         "feat".to_string(),
         "fix".to_string(),
         "update".to_string(),
@@ -262,7 +279,7 @@ async fn generate_release_notes(tag: &str, pool: &SqlitePool, progress:Option<&P
             let commits = data_access::get_commits(tag, title, &pool).await?;
             for commit in &commits {
                 notes.push_str(&format!("- {}\n", commit.content));
-                if let Some(p) = progress{
+                if let Some(p) = progress {
                     p.inc(1);
                 }
             }
@@ -338,16 +355,16 @@ mod test {
             },
         ];
 
-        assert_eq!(res, split_all(contents,None))
+        assert_eq!(res, split_all(contents, None))
     }
 
     async fn run_test(contents: &str) -> anyhow::Result<String> {
         let tag = "tag";
         let result;
-        let parsed_lines = split_all(&contents,None);
+        let parsed_lines = split_all(&contents, None);
         let pool = data_access::connect_test().await?;
-        let _ = data_access::record_commits(tag, &pool, parsed_lines,None).await?;
-        result = generate_release_notes(tag, &pool,None).await?;
+        let _ = data_access::record_commits(tag, &pool, parsed_lines, None).await?;
+        result = generate_release_notes(tag, &pool, None).await?;
         Ok(result)
     }
 
