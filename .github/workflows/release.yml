@@ -1,0 +1,33 @@
+on:
+    push:
+       tags:
+         - 'v[0-9]+.*'
+jobs:
+  export_game:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    name: Export game
+    steps:
+    - name : checkout
+      uses: actions/checkout@v3.3.0
+
+    - name: Download Dedma
+      run: |
+        curl -L https://github.com/sessokosga/Dedma/releases/download/v0.1.1/dedma_v0.1.1_linux.zip --output ./dedma_linux.zip
+      working-directory: ${{github.workspace}}
+
+    - name: generate release notes
+      run: |
+        ls -l
+        unzip ./dedma_linux.zip
+        ls -l
+        chmod +x ./dedma
+        ./dedma
+
+    - name: create release
+      uses: ncipollo/release-action@v1.12.0
+      with:
+        token: ${{ secrets.BUILD_TOKEN }}
+        generateReleaseNotes: true
+        bodyFile: "./whats_new.md"
+        tag: ${{ github.ref_name }}
