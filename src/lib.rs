@@ -10,6 +10,7 @@ use std::{
     io::Write,
     process::Command,
     vec,
+    env
 };
 
 enum CommitSource {
@@ -75,7 +76,6 @@ fn get_tag() -> anyhow::Result<(String, String)> {
             vers.push(tag.to_string());
         }
     }
-    dbg!(tags);
     if max == 2 {
         Ok((vers[1].clone(), vers[0].clone()))
     } else {
@@ -122,7 +122,11 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         tag = tagi.1;
     }
     let size: u64 = contents.lines().count().try_into().unwrap();
-    println!("Generatinge {size} release notes in '{}'", config.output);
+    if env::var("LANG_FR").is_ok(){
+        println!("Generation de {size} notes dans '{}'", config.output);
+    }else{
+        println!("Generating {size} notes in '{}'", config.output);
+    }
     let progress = get_progress_bar(size * 3);
 
     // Parsing the commits
@@ -201,7 +205,7 @@ fn get_progress_bar(size: u64) -> ProgressBar {
 
 fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
     let result;
-    let kinds: HashMap<&str, &str> = HashMap::from([
+    let mut kinds: HashMap<&str, &str> = HashMap::from([
         ("feat", "New features"),
         ("fix", "Bug fix"),
         ("chore", "Chore"),
@@ -216,6 +220,26 @@ fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
         ("update", "Updates"),
         ("other", ""),
     ]);
+
+    if env::var("LANG_FR").is_ok(){
+        kinds = HashMap::from([
+            ("feat", "Nouvelles fonctionnalités"),
+            ("fix", "Correction d'erreur"),
+            ("chore", "Chore"),
+            ("refactor", "Refactoring"),
+            ("docs", "Documentation"),
+            ("style", "Style de Code"),
+            ("test", "Test"),
+            ("perf", "Performances"),
+            ("ci", "Déploiement Continue"),
+            ("build", " Système de Build"),
+            ("revert", "Annulations"),
+            ("update", "Mise à jour"),
+            ("other", ""),
+        ]);
+    }
+
+    
     if kinds.contains_key(kind) {
         result = kinds[kind];
     } else {
