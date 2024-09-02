@@ -5,17 +5,22 @@ use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use sqlx::SqlitePool;
 use std::{
     collections::HashMap,
-    fmt,
+    env, fmt,
     fs::{self, File},
     io::Write,
     process::Command,
     vec,
-    env
 };
 
 enum CommitSource {
     File(String),
     Git,
+}
+
+#[derive(PartialEq)]
+enum ExecutionMode {
+    Help,
+    Execute,
 }
 
 #[derive(Debug, PartialEq)]
@@ -30,6 +35,7 @@ pub struct Config {
     output: String,
     source: CommitSource,
     tag: String,
+    mode: ExecutionMode,
 }
 
 impl Config {
@@ -37,6 +43,14 @@ impl Config {
         let mut output = String::from("whats_new.md");
         let mut source = CommitSource::Git;
         let tag = String::from("tag");
+        if args.contains(&String::from("--help")) {
+            return Config {
+                output,
+                source,
+                tag,
+                mode: ExecutionMode::Help,
+            };
+        }
         if args.len() >= 3 {
             source = CommitSource::File(args[1].clone());
             output = args[2].clone();
@@ -48,6 +62,7 @@ impl Config {
             output,
             source,
             tag,
+            mode: ExecutionMode::Execute,
         }
     }
 }
@@ -66,8 +81,6 @@ fn get_tag() -> anyhow::Result<(String, String)> {
     let mut vers: Vec<String> = vec![];
 
     let max = if tags.lines().count() >= 2 { 2 } else { 1 };
-
-    
 
     for tag in tags.lines() {
         if vers.len() >= max {
@@ -109,6 +122,15 @@ fn read_from_git() -> anyhow::Result<String> {
 }
 
 pub async fn run(config: Config) -> anyhow::Result<()> {
+    if config.mode == ExecutionMode::Help {
+        let mut text = fs::read_to_string("./docs/en.md")?;
+        if env::var("LANG_FR").is_ok() {
+            text = fs::read_to_string("./docs/fr.md")?;
+        }
+        println!("{}",text);
+        return Ok(());
+    }
+
     let contents;
     let tag;
     if let CommitSource::File(file) = config.source {
@@ -122,9 +144,9 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
         tag = tagi.1;
     }
     let size: u64 = contents.lines().count().try_into().unwrap();
-    if env::var("LANG_FR").is_ok(){
+    if env::var("LANG_FR").is_ok() {
         println!("Generation de {size} notes dans '{}'", config.output);
-    }else{
+    } else {
         println!("Generating {size} notes in '{}'", config.output);
     }
     let progress = get_progress_bar(size * 3);
@@ -159,20 +181,20 @@ fn split_all(contents: &str, progress: Option<&ProgressBar>) -> Vec<ParsedLine> 
 }
 
 fn split_one(line: &str) -> ParsedLine {
-    let mut kind =String::from("other");
-    let mut title=String::from("other");
+    let mut kind = String::from("other");
+    let mut title = String::from("other");
     let content;
     let hash;
     let parts: Vec<&str> = line.split(':').collect();
-    
+
     if parts.len() >= 3 {
-    if parts[0].contains('(') {
-        let sc: Vec<&str> = parts[0].split('(').collect();
-        kind = sc[0].to_lowercase().trim().to_string();
-        title = sc[1].replace(')', " ").trim().to_lowercase().to_string();
-    } else {
-        kind = parts[0].trim().to_lowercase().to_string();
-    }
+        if parts[0].contains('(') {
+            let sc: Vec<&str> = parts[0].split('(').collect();
+            kind = sc[0].to_lowercase().trim().to_string();
+            title = sc[1].replace(')', " ").trim().to_lowercase().to_string();
+        } else {
+            kind = parts[0].trim().to_lowercase().to_string();
+        }
         content = parts[1].trim().to_string();
         hash = parts[2].trim().to_string();
     } else {
@@ -221,7 +243,7 @@ fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
         ("other", ""),
     ]);
 
-    if env::var("LANG_FR").is_ok(){
+    if env::var("LANG_FR").is_ok() {
         kinds = HashMap::from([
             ("feat", "Nouvelles fonctionnalités"),
             ("fix", "Correction d'erreur"),
@@ -239,7 +261,6 @@ fn beautify_kind(kind: &str) -> anyhow::Result<&str> {
         ]);
     }
 
-    
     if kinds.contains_key(kind) {
         result = kinds[kind];
     } else {

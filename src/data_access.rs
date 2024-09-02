@@ -1,7 +1,7 @@
-use indicatif::ProgressBar;
-use sqlx::{self,sqlite::SqlitePool};
-use std::fs::{DirBuilder, File};
 use crate::ParsedLine;
+use indicatif::ProgressBar;
+use sqlx::{self, sqlite::SqlitePool};
+use std::fs::{DirBuilder, File};
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct Commit {
@@ -19,8 +19,9 @@ pub struct Title {
     pub title: String,
 }
 
-async fn create_database(pool:&SqlitePool)->anyhow::Result<()> {
-    sqlx::query("\
+async fn create_database(pool: &SqlitePool) -> anyhow::Result<()> {
+    sqlx::query(
+        "\
         CREATE TABLE IF NOT EXISTS `Commit` (
             id	INTEGER,
             content	TEXT NOT NULL,
@@ -29,47 +30,54 @@ async fn create_database(pool:&SqlitePool)->anyhow::Result<()> {
             tag	TEXT NOT NULL,
             hash	INTEGER NOT NULL UNIQUE,
             PRIMARY KEY(id AUTOINCREMENT)
-        )").execute(pool).await?;
+        )",
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
 pub async fn connect() -> anyhow::Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite:./.dedma/dedma_db.db").await;
     match pool {
-        Ok(pool) => {return  Ok(pool);}
+        Ok(pool) => {
+            return Ok(pool);
+        }
         Err(_) => {
             DirBuilder::new().create("./.dedma")?;
             File::create("./.dedma/dedma_db.db")?;
             let pool = SqlitePool::connect("sqlite:./.dedma/dedma_db.db").await;
             match pool {
-                Ok(pool) =>{
+                Ok(pool) => {
                     create_database(&pool).await?;
                     return Ok(pool);
-                } 
+                }
                 Err(error) => {
                     panic!("Error creating database: {error}")
-                },
+                }
             }
         }
     }
 }
 
-pub async fn connect_test()-> anyhow::Result<SqlitePool> {
+pub async fn connect_test() -> anyhow::Result<SqlitePool> {
     let pool = SqlitePool::connect("sqlite:./tests/test_db.db").await;
     match pool {
-        Ok(pool) => {return  Ok(pool);}
+        Ok(pool) => {
+            return Ok(pool);
+        }
         Err(_) => {
             let _ = DirBuilder::new().create("./tests");
             let _ = File::create("./tests/test_db.db");
             let pool = SqlitePool::connect("sqlite:./tests/test_db.db").await;
             match pool {
-                Ok(pool) =>{
+                Ok(pool) => {
                     create_database(&pool).await?;
                     return Ok(pool);
-                } 
+                }
                 Err(error) => {
                     panic!("Error creating database: {error}")
-                },
+                }
             }
         }
     }
@@ -134,7 +142,7 @@ pub async fn record_commits(
     tag: &str,
     pool: &SqlitePool,
     parsed_lines: Vec<ParsedLine>,
-    progress:Option<&ProgressBar>
+    progress: Option<&ProgressBar>,
 ) -> anyhow::Result<i32> {
     let mut line_recorded = 0;
     for line in parsed_lines {
@@ -142,7 +150,7 @@ pub async fn record_commits(
         match id {
             Ok(_) => {
                 line_recorded += 1;
-                if let Some(p) = progress{
+                if let Some(p) = progress {
                     p.inc(1);
                 }
             }
