@@ -1,7 +1,22 @@
 # Dedma
+[Lire en français](README_fr.md)
 ### Release notes generator
-A Command Line Interface (CLI) that generates realease notes right from your commits.
+A Command Line Interface (CLI) that generates release notes from your latest commits.  
 
+## Display help
+    dedma --help
+
+## Specify the language for generating the release notes
+### French
+To generate the release notes in french add `LANG_FR` to the environment variables
+For systems based on Unix
+	LANG_FR=1 
+
+For Windows PowerShell
+	$Env:LANG_FR=1
+
+### English
+It generate the release notes in english by default. You don't have to do anything
 
 ## Get the commits from a file
     dedma input_file output file
@@ -59,4 +74,3 @@ ci | Continuous Integration (CI)  | continuous integration related
 build | Build System  | changes that affect the build system or external dependencies  
 revert | Reverts  | reverts a previous commit  
 update | Updates  | Any update  
-other | | Anything that doen't match any category. This is put at the top  

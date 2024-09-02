@@ -123,11 +123,106 @@ fn read_from_git() -> anyhow::Result<String> {
 
 pub async fn run(config: Config) -> anyhow::Result<()> {
     if config.mode == ExecutionMode::Help {
-        let mut text = fs::read_to_string("./docs/en.md")?;
         if env::var("LANG_FR").is_ok() {
-            text = fs::read_to_string("./docs/fr.md")?;
+            println!("Dedma v0.1.2
+Générateur de notes de versions (Release notes)
+Un outil qui converti vos derniers commit en notes de version.
+
+La note est générée en anglais par défaut.
+
+Pour générer une note en français, ajouter `LANG_FR` dans les variables d'environnement.
+Pour les systèmes basés sur Unix
+    LANG_FR=1 
+
+Pour Windows PowerShell
+    $Env:LANG_FR=1
+
+Générer des notes à partir des commit dans un fichier
+    dedma fichier_d_entree fichier_de_sortie
+
+Générer les notes à partir des commit de Git
+    dedma fichier_de_sortie
+    
+ou 
+
+    dedma
+
+pour générer les notes dans le fichier `whats_new.md`
+
+Structure de commit idéale
+    type (titre): contenu
+
+Le `titre` et le `contenu` peuvent être ce que vous voulez.
+
+Voici une liste des types supportés actuellement, classés par ordre d'apparence dans la note générées.
+
+ ______________________________________
+    
+|   type   | nom complet               |
+| -------- | ------------------------- |
+|   feat   | Nouvelles fonctionnalités |
+|   fix    | Correction d'erreur       |
+|  chore   | Chore                     |
+| refactor | Refactoring               |
+|   docs   | Documentation             |
+|  style   | Style de Code             |
+|   test   | Test                      |
+|   perf   | Performances              |
+|    ci    | Déploiements Continue     |
+|  build   | Système de Build          |
+|  revert  | Annulations               |
+|  update  | Mise à jour               |
+ --------------------------------------");
+        }else{
+            println!("Dedma v0.1.2
+Release notes generator
+A Command Line Interface (CLI) that generates release notes from your latest commits. 
+
+The release notes are generated in english by default.
+
+To generate the release notes in french add `LANG_FR` to the environment variables
+For systems based on Unix
+    LANG_FR=1 
+
+For Windows PowerShell
+    $Env:LANG_FR=1
+
+Get the commits from a file
+    dedma input_file output file
+
+Get them directly from git
+    dedma output_file
+    
+        or 
+
+    dedma
+
+to generate the notes in the file `whats_new.md`
+
+Ideal commit structure
+    kind (title): content
+For `title` and `content` you can put whatever you want.  
+Here are the supported `kind` right now in the order of appearance in the generated notes
+
+  ______________________________________
+
+|   kind   | full name                   |
+| :------: | --------------------------- |
+|   feat   | New features                |
+|   fix    | Bug fix                     |
+|  chore   | Chore                       |
+| refactor | Refactoring                 |
+|   docs   | Documentation               |
+|  style   | Code Style                  |
+|   test   | Test                        |
+|   perf   | Performances                |
+|    ci    | Continuous Integration (CI) |
+|  build   | Build System                |
+|  revert  | Reverts                     |
+|  update  | Updates                     |
+  ______________________________________
+            ");
         }
-        println!("{}",text);
         return Ok(());
     }
 
